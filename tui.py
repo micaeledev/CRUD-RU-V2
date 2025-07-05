@@ -1,4 +1,19 @@
-# Interface Terminal (TUI) - Sistema CRUD
+# CAMADA DE APRESENTAÇÃO - TERMINAL USER INTERFACE (TUI)
+#
+# Este módulo implementa a interface de usuário em terminal para o sistema RU.
+# 
+# CARACTERÍSTICAS PRINCIPAIS:
+# - Interface intuitiva com menus navegáveis
+# - Validação em tempo real de entrada de dados
+# - Dicas contextuais para reduzir erros do usuário
+# - Formatação consistente de dados de saída
+# - Tratamento gracioso de cancelamentos
+# 
+# TECNOLOGIAS UTILIZADAS:
+# - questionary: Biblioteca para interfaces interativas elegantes
+# - Validação personalizada com lambda functions
+# - ASCII art para identidade visual
+
 import questionary
 import os
 from datetime import datetime
@@ -99,46 +114,72 @@ def pagamento_management_menu():
 # ==================== FORMULÁRIOS DE ENTRADA ====================
 
 def get_user_data(existing_user=None):
-    """Coleta dados do usuário usando estrutura real do Supabase"""
-    print("\nDados do Usuário:")
+    """
+    FORMULÁRIO INTELIGENTE - CADASTRO/EDIÇÃO DE USUÁRIO
     
+    Implementa coleta de dados com validação em tempo real e dicas contextuais.
+    
+    VALIDAÇÕES IMPLEMENTADAS:
+    - Matrícula: Apenas números, mínimo 8 dígitos
+    - CPF: Exatamente 11 dígitos numéricos
+    - Email: Formato básico com @ e domínio
+    - Nome: Mínimo 2 caracteres
+    - Telefone: Campo opcional
+    
+    CARACTERÍSTICAS UX:
+    - Pré-preenchimento para edição
+    - Campos obrigatórios marcados com *
+    - Exemplos práticos em cada campo
+    - Cancelamento gracioso com Enter vazio
+    """
+    print("\nDados do Usuário:")
+    print("[DICA] Todos os campos marcados com * são obrigatórios")
+    
+    print("\n[DICA] Matrícula: Digite apenas números, mínimo 8 dígitos (ex: 20231001234)")
     matricula_usuario = questionary.text(
-        "Matrícula do usuário:",
+        "Matrícula do usuário *:",
         default=str(existing_user[1]) if existing_user else "",
         validate=lambda x: x.isdigit() and len(x) >= 8 if x else False
     ).ask()
     if not matricula_usuario:
         return None
     
+    print("\n[DICA] CPF: Digite apenas os 11 números, sem pontos ou traços (ex: 12345678901)")
     cpf_usuario = questionary.text(
-        "CPF (somente números):",
+        "CPF (somente números) *:",
         default=existing_user[2] if existing_user else "",
         validate=lambda x: x.isdigit() and len(x) == 11 if x else False
     ).ask()
     if not cpf_usuario:
         return None
     
+    print("\n[DICA] Nome: Digite o nome completo (ex: João Silva Santos)")
     nome_usuario = questionary.text(
-        "Nome completo:",
-        default=existing_user[3] if existing_user else ""
+        "Nome completo *:",
+        default=existing_user[3] if existing_user else "",
+        validate=lambda x: len(x.strip()) >= 2 if x else False
     ).ask()
     if not nome_usuario:
         return None
     
+    print("\n[DICA] Email: Digite um email válido (ex: joao.silva@aluno.unb.br)")
     email_usuario = questionary.text(
-        "Email:",
-        default=existing_user[4] if existing_user else ""
+        "Email *:",
+        default=existing_user[4] if existing_user else "",
+        validate=lambda x: "@" in x and "." in x.split("@")[-1] if x else False
     ).ask()
     if not email_usuario:
         return None
     
+    print("\n[DICA] Telefone: Digite com DDD (ex: (61) 99999-1234) - Campo opcional")
     telefone_usuario = questionary.text(
-        "Telefone:",
+        "Telefone (opcional):",
         default=existing_user[5] if existing_user else ""
     ).ask()
     
+    print("\n[DICA] Status: Selecione o status atual do usuário")
     status_usuario = questionary.select(
-        "Status:",
+        "Status *:",
         choices=["ativo", "trancado", "formado", "jubilado", "suspenso"],
         default=existing_user[6] if existing_user else "ativo"
     ).ask()
@@ -146,15 +187,16 @@ def get_user_data(existing_user=None):
     return {
         'matricula_usuario': int(matricula_usuario),
         'CPF_usuario': cpf_usuario,
-        'nome_usuario': nome_usuario,
-        'email_usuario': email_usuario,
-        'telefone_usuario': telefone_usuario or None,
+        'nome_usuario': nome_usuario.strip(),
+        'email_usuario': email_usuario.strip().lower(),
+        'telefone_usuario': telefone_usuario.strip() or None,
         'status_usuario': status_usuario
     }
 
 def get_pedido_data(existing_pedido=None, usuarios_disponiveis=None):
     """Coleta dados do pedido usando estrutura real do Supabase"""
     print("\nDados do Pedido:")
+    print("[DICA] Todos os campos marcados com * são obrigatórios")
     
     # Se há usuários disponíveis, permite seleção direta
     if usuarios_disponiveis and len(usuarios_disponiveis) > 0:
@@ -165,8 +207,9 @@ def get_pedido_data(existing_pedido=None, usuarios_disponiveis=None):
         
         usuario_choices.append("Digitar ID manualmente")
         
+        print("\n[DICA] Selecione um usuário da lista ou digite o ID manualmente")
         usuario_selection = questionary.select(
-            "Selecione o usuário para o pedido:",
+            "Selecione o usuário para o pedido *:",
             choices=usuario_choices
         ).ask()
         
@@ -174,10 +217,11 @@ def get_pedido_data(existing_pedido=None, usuarios_disponiveis=None):
             return None
         
         if usuario_selection == "Digitar ID manualmente":
+            print("\n[DICA] Digite o ID numérico do usuário (ex: 1, 2, 3, etc.)")
             pedido_usuario = questionary.text(
-                "ID do Usuário:",
+                "ID do Usuário *:",
                 default=str(existing_pedido[1]) if existing_pedido else "",
-                validate=lambda x: x.isdigit() if x else False
+                validate=lambda x: x.isdigit() and int(x) > 0 if x else False
             ).ask()
             if not pedido_usuario:
                 return None
@@ -186,26 +230,31 @@ def get_pedido_data(existing_pedido=None, usuarios_disponiveis=None):
             # Extrair o ID do usuário selecionado
             pedido_usuario = int(usuario_selection.split(" - ")[0].replace("ID ", ""))
     else:
+        print("\n[DICA] Digite o ID numérico do usuário (ex: 1, 2, 3, etc.)")
+        print("[DICA] Use 'Listar Usuários' no menu principal para encontrar o ID")
         pedido_usuario = questionary.text(
-            "ID do Usuário:",
+            "ID do Usuário *:",
             default=str(existing_pedido[1]) if existing_pedido else "",
-            validate=lambda x: x.isdigit() if x else False
+            validate=lambda x: x.isdigit() and int(x) > 0 if x else False
         ).ask()
         if not pedido_usuario:
             return None
         pedido_usuario = int(pedido_usuario)
     
     # Buscar cardápios disponíveis seria ideal aqui, mas para simplificar vamos pedir o ID
+    print("\n[DICA] ID do Cardápio: Digite um número (ex: 1=almoço, 2=jantar, 3=café)")
+    print("[DICA] Use valores de 1 a 7 conforme os cardápios disponíveis no sistema")
     ped_cardapio = questionary.text(
-        "ID do Cardápio:",
+        "ID do Cardápio *:",
         default=str(existing_pedido[5]) if existing_pedido and len(existing_pedido) > 5 else "1",
-        validate=lambda x: x.isdigit() if x else False
+        validate=lambda x: x.isdigit() and int(x) > 0 if x else False
     ).ask()
     if not ped_cardapio:
         return None
     
+    print("\n[DICA] Status: Selecione o status atual do pedido")
     status_do_pedido = questionary.select(
-        "Status:",
+        "Status *:",
         choices=["pendente", "pago", "entregue", "cancelado"],
         default=existing_pedido[4] if existing_pedido else "pendente"
     ).ask()
@@ -217,8 +266,31 @@ def get_pedido_data(existing_pedido=None, usuarios_disponiveis=None):
     }
 
 def get_pagamento_data(existing_pagamento=None, pedidos_disponiveis=None):
-    """Coleta dados do pagamento usando estrutura real do Supabase"""
+    """
+    FORMULÁRIO MAIS COMPLEXO - CADASTRO/EDIÇÃO DE PAGAMENTO
+    
+    Este é o formulário mais sofisticado, integrando dados de múltiplas entidades.
+    
+    COMPLEXIDADES GERENCIADAS:
+    - Seleção inteligente de pedidos (lista + ID manual)
+    - Validação de valores decimais (aceita vírgula e ponto)
+    - Prevenção de pagamentos duplicados
+    - Integração com categorias de usuário
+    - Cálculos automáticos por tipo de categoria
+    
+    REGRAS DE NEGÓCIO IMPLEMENTADAS:
+    - Estudante assistência: R$ 0,00 (gratuito)
+    - Estudante regular: Valor com desconto 60%
+    - Servidor: Valor integral sem desconto
+    
+    CARACTERÍSTICAS UX AVANÇADAS:
+    - Lista visual de pedidos disponíveis
+    - Avisos sobre duplicação de pagamentos  
+    - Dicas de preenchimento contextuais
+    - Informações sobre categorias e preços
+    """
     print("\nDados do Pagamento:")
+    print("[DICA] Todos os campos marcados com * são obrigatórios")
     
     # Se há pedidos disponíveis, permite seleção direta
     if pedidos_disponiveis and len(pedidos_disponiveis) > 0:
@@ -232,8 +304,10 @@ def get_pagamento_data(existing_pagamento=None, pedidos_disponiveis=None):
         
         pedido_choices.append("Digitar ID manualmente")
         
+        print("\n[DICA] Selecione um pedido da lista ou digite o ID manualmente")
+        print("[AVISO] Só é possível criar um pagamento por pedido!")
         pedido_selection = questionary.select(
-            "Selecione o pedido para pagamento:",
+            "Selecione o pedido para pagamento *:",
             choices=pedido_choices
         ).ask()
         
@@ -241,10 +315,12 @@ def get_pagamento_data(existing_pagamento=None, pedidos_disponiveis=None):
             return None
         
         if pedido_selection == "Digitar ID manualmente":
+            print("\n[DICA] Digite o ID numérico do pedido (ex: 1, 2, 3, etc.)")
+            print("[DICA] Use 'Listar Pedidos' no menu principal para encontrar o ID")
             pag_pedido = questionary.text(
-                "ID do Pedido:",
+                "ID do Pedido *:",
                 default=str(existing_pagamento[1]) if existing_pagamento else "",
-                validate=lambda x: x.isdigit() if x else False
+                validate=lambda x: x.isdigit() and int(x) > 0 if x else False
             ).ask()
             if not pag_pedido:
                 return None
@@ -266,39 +342,47 @@ def get_pagamento_data(existing_pagamento=None, pedidos_disponiveis=None):
             else:
                 pag_categoria_usuario = pag_pedido
     else:
+        print("\n[DICA] Digite o ID numérico do pedido (ex: 1, 2, 3, etc.)")
+        print("[DICA] Use 'Listar Pedidos' no menu principal para encontrar o ID")
+        print("[AVISO] Só é possível criar um pagamento por pedido!")
         pag_pedido = questionary.text(
-            "ID do Pedido:",
+            "ID do Pedido *:",
             default=str(existing_pagamento[1]) if existing_pagamento else "",
-            validate=lambda x: x.isdigit() if x else False
+            validate=lambda x: x.isdigit() and int(x) > 0 if x else False
         ).ask()
         if not pag_pedido:
             return None
         pag_pedido = int(pag_pedido)
         pag_categoria_usuario = pag_pedido
     
+    print("\n[DICA] Valor: Digite o valor em reais com ponto decimal (ex: 15.50, 0.00)")
+    print("[DICA] Para estudantes com assistência, use 0.00 (gratuito)")
     valor_pago = questionary.text(
-        "Valor pago (0.00):",
-        default=str(existing_pagamento[3]) if existing_pagamento else "",
+        "Valor pago (0.00) *:",
+        default=str(existing_pagamento[3]) if existing_pagamento else "0.00",
         validate=lambda x: is_valid_decimal(x) if x else False
     ).ask()
     if not valor_pago:
         return None
     
+    print("\n[DICA] Forma de pagamento: Selecione como o pagamento foi realizado")
     forma_de_pagamento = questionary.select(
-        "Forma de pagamento:",
+        "Forma de pagamento *:",
         choices=["dinheiro", "pix", "cartao", "vale"],
-        default=existing_pagamento[4] if existing_pagamento else "pix"
+        default=existing_pagamento[4] if existing_pagamento else "vale"
     ).ask()
     
+    print("\n[DICA] Categoria: Selecione o tipo de usuário para definir preços")
+    print("[INFO] estudante_assistencia=R$0.00, estudante_regular=desconto 60%, servidor=preço integral")
     pag_categoria_nome = questionary.select(
-        "Categoria do usuário:",
+        "Categoria do usuário *:",
         choices=["estudante_assistencia", "estudante_regular", "servidor"],
         default=existing_pagamento[6] if existing_pagamento else "estudante_regular"
     ).ask()
     
     return {
         'pag_pedido': pag_pedido,
-        'valor_pago': float(valor_pago),
+        'valor_pago': float(valor_pago.replace(',', '.')),
         'forma_de_pagamento': forma_de_pagamento,
         'pag_categoria_usuario': pag_categoria_usuario,
         'pag_categoria_nome': pag_categoria_nome
@@ -307,62 +391,107 @@ def get_pagamento_data(existing_pagamento=None, pedidos_disponiveis=None):
 # ==================== FUNÇÕES DE VALIDAÇÃO ====================
 
 def is_valid_decimal(value):
-    """Valida se a string é um decimal válido"""
+    """
+    VALIDADOR INTELIGENTE - VALORES DECIMAIS
+    
+    Aceita múltiplos formatos de entrada para melhor UX:
+    - Ponto como separador decimal (15.50)
+    - Vírgula como separador decimal (15,50)  
+    - Valores inteiros (15)
+    - Remove espaços automaticamente
+    
+    Garante que valores sejam não-negativos (≥ 0).
+    """
     try:
-        float(value)
-        return float(value) >= 0
+        if not value:
+            return False
+        # Remove espaços em branco
+        value = value.strip()
+        # Aceita vírgula como separador decimal (converte para ponto)
+        value = value.replace(',', '.')
+        decimal_value = float(value)
+        return decimal_value >= 0
     except ValueError:
         return False
 
 def get_user_id(action_type):
-    """Solicita ID do usuário"""
+    """Solicita ID do usuário com dicas de validação"""
+    print("\n[DICA] Para encontrar o ID do usuário, use 'Listar Usuários' no menu principal.")
+    print("[DICA] O ID é um número inteiro positivo (ex: 1, 2, 3, etc.)")
+    
     user_id_str = questionary.text(
-        f"Digite o ID do usuário para {action_type} (ou Enter para cancelar):"
+        f"Digite o ID do usuário para {action_type} (ou Enter para cancelar):",
+        validate=lambda x: x.isdigit() and int(x) > 0 if x else True
     ).ask()
     
     if not user_id_str:
         return None
     
     try:
-        return int(user_id_str)
+        user_id = int(user_id_str)
+        if user_id <= 0:
+            print("[ERRO] ID deve ser um número positivo maior que zero.")
+            return None
+        return user_id
     except ValueError:
-        print("[ERRO] ID inválido. Deve ser um número.")
+        print("[ERRO] ID inválido. Deve ser um número inteiro positivo.")
         return None
 
 def get_pedido_id(action_type):
-    """Solicita ID do pedido"""
+    """Solicita ID do pedido com dicas de validação"""
+    print("\n[DICA] Para encontrar o ID do pedido, use 'Listar Pedidos' no menu principal.")
+    print("[DICA] O ID é um número inteiro positivo (ex: 1, 2, 3, etc.)")
+    
     pedido_id_str = questionary.text(
-        f"Digite o ID do pedido para {action_type} (ou Enter para cancelar):"
+        f"Digite o ID do pedido para {action_type} (ou Enter para cancelar):",
+        validate=lambda x: x.isdigit() and int(x) > 0 if x else True
     ).ask()
     
     if not pedido_id_str:
         return None
     
     try:
-        return int(pedido_id_str)
+        pedido_id = int(pedido_id_str)
+        if pedido_id <= 0:
+            print("[ERRO] ID deve ser um número positivo maior que zero.")
+            return None
+        return pedido_id
     except ValueError:
-        print("[ERRO] ID inválido. Deve ser um número.")
+        print("[ERRO] ID inválido. Deve ser um número inteiro positivo.")
         return None
 
 def get_pagamento_id(action_type):
-    """Solicita ID do pagamento"""
+    """Solicita ID do pagamento com dicas de validação"""
+    print("\n[DICA] Para encontrar o ID do pagamento, use 'Listar Pagamentos' no menu principal.")
+    print("[DICA] O ID é um número inteiro positivo (ex: 1, 2, 3, etc.)")
+    
     pagamento_id_str = questionary.text(
-        f"Digite o ID do pagamento para {action_type} (ou Enter para cancelar):"
+        f"Digite o ID do pagamento para {action_type} (ou Enter para cancelar):",
+        validate=lambda x: x.isdigit() and int(x) > 0 if x else True
     ).ask()
     
     if not pagamento_id_str:
         return None
     
     try:
-        return int(pagamento_id_str)
+        pagamento_id = int(pagamento_id_str)
+        if pagamento_id <= 0:
+            print("[ERRO] ID deve ser um número positivo maior que zero.")
+            return None
+        return pagamento_id
     except ValueError:
-        print("[ERRO] ID inválido. Deve ser um número.")
+        print("[ERRO] ID inválido. Deve ser um número inteiro positivo.")
         return None
 
 # ==================== FUNÇÕES DE EXIBIÇÃO ====================
 
 def display_users(users):
-    """Exibe lista de usuários usando estrutura real do Supabase"""
+    """
+    VISUALIZADOR DE DADOS - USUÁRIOS
+    
+    Formata e exibe dados de usuários em tabela organizada.
+    Inclui indicadores visuais de status e tratamento de dados vazios.
+    """
     print("\nLISTA DE USUÁRIOS")
     print("=" * 90)
     

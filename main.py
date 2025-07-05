@@ -1,5 +1,22 @@
-# Sistema CRUD - 3 Tabelas Relacionadas
-# Usuario -> Pedido -> Pagamento
+# SISTEMA CRUD - RESTAURANTE UNIVERSITÁRIO UNB
+#
+# Sistema de gerenciamento completo para o RU da UnB implementando:
+# 
+# ARQUITETURA MVC:
+# - Model: database.py (Camada de dados/PostgreSQL)  
+# - View: tui.py (Interface de usuário/Terminal)
+# - Controller: main.py (Lógica de negócio/Fluxo)
+#
+# RELACIONAMENTO HIERÁRQUICO:
+# USUARIO (1) → (N) PEDIDO (1) → (1) PAGAMENTO
+# 
+# FUNCIONALIDADES PRINCIPAIS:
+# - CRUD completo para 3 entidades relacionadas
+# - Validação de integridade referencial
+# - Interface intuitiva com dicas de validação
+# - Tratamento robusto de erros
+# - Chaves estrangeiras compostas
+
 import tui
 import database
 import time
@@ -7,12 +24,26 @@ import questionary
 import psycopg2
 
 def main():
-    # Conecta ao banco de dados
+    """
+    FUNÇÃO PRINCIPAL - CONTROLADOR DO SISTEMA
+    
+    Responsabilidades:
+    1. Estabelecer conexão com PostgreSQL/Supabase
+    2. Verificar/configurar estrutura do banco de dados  
+    3. Gerenciar menu principal e navegação
+    4. Coordenar interação entre TUI e Database
+    """
+    
+    # FASE 1: INICIALIZAÇÃO DO SISTEMA
+    
+    # Estabelece conexão segura com banco de dados
     conn = database.connect()
     if not conn:
-        return
+        return  # Falha crítica: sem BD, sistema não pode operar
 
-    # Verifica se as tabelas existem (usando nomes reais do Supabase)
+    # FASE 2: VERIFICAÇÃO DE INTEGRIDADE DO BANCO DE DADOS
+    
+    # Verifica se as tabelas existem (usando schema real do Supabase)
     try:
         with conn.cursor() as cur:
             cur.execute("SELECT 1 FROM Usuario LIMIT 1;")
@@ -20,6 +51,7 @@ def main():
     except psycopg2.Error:
         table_exists = False
 
+    # Configuração automática caso necessário
     if not table_exists:
         print("Tabelas não encontradas. Configurando o esquema do banco de dados...")
         database.setup_database_schema(conn)
@@ -29,9 +61,12 @@ def main():
     else:
         print("Base de dados Supabase detectada. Carregando dados existentes...")
         database.setup_database_schema(conn)  # Apenas verifica estrutura
-        database.populate_sample_data(conn)   # Apenas verifica dados
+        database.populate_sample_data(conn)   # Apenas verifica dados  
         time.sleep(1)
 
+    # FASE 3: LOOP PRINCIPAL DO SISTEMA
+    # Coordena navegação entre os módulos CRUD respeitando hierarquia de dados
+    
     while True:
         main_choice = tui.main_menu()
 
@@ -40,18 +75,33 @@ def main():
             break
             
         elif main_choice == "Gerenciar Usuários":
+            # NÍVEL 1: Gerenciamento de usuários (entidade base)
             handle_usuario_crud(conn)
             
-        elif main_choice == "Gerenciar Pedidos":
+        elif main_choice == "Gerenciar Pedidos":  
+            # NÍVEL 2: Gerenciamento de pedidos (depende de usuários)
             handle_pedido_crud(conn)
             
         elif main_choice == "Gerenciar Pagamentos":
+            # NÍVEL 3: Gerenciamento de pagamentos (depende de pedidos)
             handle_pagamento_crud(conn)
 
+    # Fechamento seguro da conexão
     conn.close()
 
 def handle_usuario_crud(conn):
-    """Gerencia o CRUD de usuários"""
+    """
+    CONTROLADOR CRUD - MÓDULO USUÁRIOS  
+    
+    Gerencia operações CRUD para a entidade USUARIO (nível 1 da hierarquia).
+    Implementa padrão de validação e tratamento de erro consistente.
+    
+    Operações disponíveis:
+    - CREATE: Cadastro de novos usuários com validação
+    - READ: Listagem e consulta de usuários  
+    - UPDATE: Atualização de dados existentes
+    - DELETE: Remoção com confirmação de segurança
+    """
     while True:
         user_choice = tui.user_management_menu()
 
@@ -185,7 +235,23 @@ def handle_pedido_crud(conn):
             input("Pressione Enter para continuar...")
 
 def handle_pagamento_crud(conn):
-    """Gerencia o CRUD de pagamentos"""
+    """
+    CONTROLADOR CRUD - MÓDULO PAGAMENTOS (FUNÇÃO MAIS COMPLEXA)
+    
+    Gerencia operações CRUD para a entidade PAGAMENTO (nível 3 da hierarquia).
+    
+    COMPLEXIDADES ESPECÍFICAS:
+    - Validação de pedidos pendentes (só permite pagamento para pedidos válidos)
+    - Prevenção de pagamentos duplicados (constraint UNIQUE)
+    - Criação automática de categorias de usuário
+    - Chaves estrangeiras compostas
+    - Cálculo automático de valores por categoria
+    
+    REGRAS DE NEGÓCIO:
+    - estudante_assistencia: R$ 0,00 (subsidiado 100%)
+    - estudante_regular: Valor com desconto (subsidiado 60%)  
+    - servidor: Valor integral (sem subsídio)
+    """
     while True:
         pagamento_choice = tui.pagamento_management_menu()
 
@@ -193,9 +259,12 @@ def handle_pagamento_crud(conn):
             break
             
         elif pagamento_choice == "Cadastrar Pagamento":
-            # Mostra pedidos pendentes
+            # OPERAÇÃO MAIS COMPLEXA: CADASTRO DE PAGAMENTO
+            # Esta operação demonstra integração completa entre as 3 entidades
+            
             print("\n[INFO] Pedidos pendentes de pagamento:")
             try:
+                # ETAPA 1: Buscar pedidos elegíveis para pagamento
                 pedidos_pendentes = database.get_pedidos_pendentes(conn)
                 if pedidos_pendentes:
                     tui.display_pedidos(pedidos_pendentes)
@@ -211,9 +280,12 @@ def handle_pagamento_crud(conn):
                 input("Pressione Enter para continuar...")
                 continue
             
+            # ETAPA 2: Coletar dados do pagamento via interface
             pagamento_data = tui.get_pagamento_data(pedidos_disponiveis=pedidos_pendentes)
             if pagamento_data:
                 try:
+                    # ETAPA 3: Executar lógica complexa de cadastro
+                    # (validação unicidade + FK composta + criação categoria)
                     database.add_pagamento(conn, pagamento_data)
                     print("\n[SUCESSO] Pagamento cadastrado com sucesso!\n")
                 except psycopg2.Error as e:

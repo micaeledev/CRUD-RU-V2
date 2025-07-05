@@ -1,22 +1,47 @@
-# Camada de Persistência - CRUD para 3 Tabelas Relacionadas
+# CAMADA DE PERSISTÊNCIA - SISTEMA RU UNB
+# 
+# Este módulo implementa a camada de acesso a dados para o sistema do RU da UNB
+# Gerencia 3 entidades principais em relacionamento hierárquico:
+# USUARIO → PEDIDO → PAGAMENTO
+# 
+# Características técnicas:
+# - Conexão com PostgreSQL/Supabase
+# - Chaves estrangeiras compostas
+# - Validação de integridade referencial
+# - Tratamento de constraints únicas
+
 import psycopg2
 import os
 from datetime import datetime
 
 def get_db_config(file_path='.env'):
-    """Lê as configurações do banco de dados do arquivo .env"""
+    """
+    CONFIGURAÇÃO DE CONEXÃO COM BANCO DE DADOS
+    
+    Lê as credenciais de conexão do arquivo .env para manter segurança.
+    Suporta múltiplas codificações para compatibilidade.
+    
+    Variáveis esperadas no .env:
+    - DB_NAME: Nome do banco
+    - DB_USER: Usuário  
+    - DB_PASSWORD: Senha
+    - DB_HOST: Endereço do servidor
+    - DB_PORT: Porta de conexão
+    """
     config = {}
     base_dir = os.path.dirname(os.path.abspath(__file__))
     absolute_file_path = os.path.join(base_dir, file_path)
     
     try:
-        # Tenta diferentes codificações
+        # Tenta diferentes codificações para compatibilidade cross-platform
         encodings = ['utf-8', 'latin-1', 'cp1252']
         for encoding in encodings:
             try:
                 with open(absolute_file_path, 'r', encoding=encoding) as f:
+                    # Parse das variáveis de ambiente no formato KEY=VALUE
                     for line in f:
                         line = line.strip()
+                        # Ignora linhas vazias e comentários
                         if line and not line.startswith('#'):
                             if '=' in line:
                                 key, value = line.split('=', 1)
@@ -34,7 +59,15 @@ def get_db_config(file_path='.env'):
     return config
 
 def connect():
-    """Conecta ao banco de dados PostgreSQL"""
+    """
+    ESTABELECE CONEXÃO COM POSTGRESQL/SUPABASE
+    
+    Cria conexão segura com o banco de dados usando as credenciais do .env.
+    Implementa tratamento de erro para falhas de conexão.
+    
+    Returns:
+        psycopg2.connection: Objeto de conexão ativa ou None se falhar
+    """
     config = get_db_config()
 
     if not config or not all(k in config for k in ["DB_NAME", "DB_USER", "DB_PASSWORD", "DB_HOST", "DB_PORT"]):
@@ -102,7 +135,7 @@ def populate_sample_data(conn):
     except psycopg2.Error as e:
         print(f"[ERRO] Erro ao verificar dados existentes: {e}")
 
-# ==================== CRUD USUARIO (ESTRUTURA REAL SUPABASE) ====================
+# CRUD USUARIO (ESTRUTURA REAL DO SUPABASE)
 
 def add_user(conn, user_data):
     """Adiciona um novo usuário usando estrutura real do Supabase"""
@@ -177,7 +210,7 @@ def delete_user(conn, user_id):
         cur.execute(sql, (user_id,))
         conn.commit()
 
-# ==================== CRUD PEDIDO (ESTRUTURA REAL SUPABASE) ====================
+# CRUD PEDIDO (ESTRUTURA REAL SUPABASE)
 
 def add_pedido(conn, pedido_data):
     """Adiciona um novo pedido usando estrutura real do Supabase"""
@@ -226,7 +259,7 @@ def get_pedidos_pendentes(conn):
         LEFT JOIN Cardapio c ON p.ped_cardapio = c.id_cardapio
         WHERE p.status_do_pedido IN ('pendente', 'pago')
           AND p.id_pedido NOT IN (
-              SELECT pg.pag_pedido FROM Pagamento pg WHERE pg.valor_pago > 0
+              SELECT pg.pag_pedido FROM Pagamento pg WHERE pg.pag_pedido IS NOT NULL
           )
         ORDER BY p.data_hora;
         """
@@ -275,37 +308,73 @@ def delete_pedido(conn, pedido_id):
         cur.execute(sql, (pedido_id,))
         conn.commit()
 
-# ==================== CRUD PAGAMENTO (ESTRUTURA REAL SUPABASE) ====================
+#  CRUD PAGAMENTO (ESTRUTURA REAL SUPABASE)
 
 def add_pagamento(conn, pagamento_data):
-    """Adiciona um novo pagamento com chave estrangeira composta (FK: pag_categoria_usuario, pag_categoria_nome) → CATEGORIA_USUARIO(id_usuario, nome_categoria)"""
+    """
+    FUNÇÃO PRINCIPAL: CADASTRO DE PAGAMENTO
+    
+    Esta é a função mais complexa do sistema, implementando:
+    
+    1. VALIDAÇÃO DE UNICIDADE: Impede pagamentos duplicados por pedido
+    2. CHAVE ESTRANGEIRA COMPOSTA: (pag_categoria_usuario, pag_categoria_nome) 
+       → CATEGORIA_USUARIO(id_usuario, nome_categoria)
+    3. VERIFICAÇÃO AUTOMÁTICA DE CATEGORIA: Verifica se a categoria do usuário existe
+    4. INTEGRIDADE REFERENCIAL: Garante consistência entre tabelas relacionadas
+    
+    Fluxo de execução:
+    - FASE 1: Verificação de duplicação de pagamento
+    - FASE 2: Validação de categoria de usuário  
+    - FASE 3: Inserção do pagamento com FK composta
+    
+    Args:
+        conn: Conexão ativa com PostgreSQL
+        pagamento_data: Dict com dados do pagamento
+        
+    Returns:
+        int: ID do pagamento criado
+        
+    Raises:
+        psycopg2.Error: Para violações de constraint ou erros de BD
+    """
     try:
         user_id = pagamento_data['pag_categoria_usuario']
         categoria_nome = pagamento_data['pag_categoria_nome']
+        pedido_id = pagamento_data['pag_pedido']
         
-        print(f"[INFO] Processando pagamento para usuário {user_id}, categoria '{categoria_nome}'")
+        # FASE 1: VALIDAÇÃO DE UNICIDADE DE PAGAMENTO
+        # O sistema permite apenas UM pagamento por pedido (constraint UNIQUE)
+        # Esta verificação prévia evita violação de constraint e melhora UX (experiencia do usuário)
         
-        # PASSO 1: Garantir que a categoria existe na tabela CATEGORIA_USUARIO
-        print(f"[INFO] Verificando/criando categoria ({user_id}, {categoria_nome}) na tabela CATEGORIA_USUARIO...")
+        with conn.cursor() as cur:
+            cur.execute("SELECT id_pagamento FROM Pagamento WHERE pag_pedido = %s", (pedido_id,))
+            existing_payment = cur.fetchone()
+            
+            if existing_payment:
+                raise psycopg2.Error(f"Pagamento duplicado: já existe pagamento para o pedido {pedido_id}")
         
-        # Verificar se já existe
+        # FASE 2: VALIDAÇÃO DE CATEGORIA DE USUÁRIO  
+        # A FK composta exige que (id_usuario, nome_categoria) exista em CATEGORIA_USUARIO
+        
+        
+        # Verificar se a categoria já existe para este usuário
         categoria_existente = get_categoria_usuario(conn, user_id, categoria_nome)
         
         if not categoria_existente:
-            print(f"[INFO] Categoria não encontrada. Criando...")
+            # Tentativa de criação automática da categoria
             categoria_criada = create_categoria_usuario_if_not_exists(conn, user_id, categoria_nome)
             
             if not categoria_criada:
                 raise psycopg2.Error(f"Não foi possível criar categoria ({user_id}, {categoria_nome})")
             
-            # Verificar novamente se foi criada
+            # Verificação dupla: confirmar que a categoria foi realmente criada
             categoria_existente = get_categoria_usuario(conn, user_id, categoria_nome)
             if not categoria_existente:
                 raise psycopg2.Error(f"Categoria ({user_id}, {categoria_nome}) não foi criada corretamente")
         
-        print(f"[SUCESSO] Categoria ({user_id}, {categoria_nome}) confirmada na tabela CATEGORIA_USUARIO")
-        
-        # PASSO 2: Inserir o pagamento com a FK composta
+        # FASE 3: INSERÇÃO DO PAGAMENTO COM CHAVE ESTRANGEIRA COMPOSTA
+        # Agora que garantimos a existência da categoria, podemos inserir o pagamento
+        # A FK composta (pag_categoria_usuario, pag_categoria_nome) será válida
         sql = """
         INSERT INTO Pagamento (pag_pedido, valor_pago, forma_de_pagamento, pag_categoria_usuario, pag_categoria_nome) 
         VALUES (%s, %s, %s, %s, %s)
@@ -314,44 +383,21 @@ def add_pagamento(conn, pagamento_data):
         
         with conn.cursor() as cur:
             cur.execute(sql, (
-                pagamento_data['pag_pedido'], 
+                pedido_id, 
                 pagamento_data['valor_pago'], 
                 pagamento_data['forma_de_pagamento'], 
-                user_id,  # FK parte 1
-                categoria_nome  # FK parte 2
+                user_id,  # FK composta - parte 1: id_usuario
+                categoria_nome  # FK composta - parte 2: nome_categoria  
             ))
             pagamento_id = cur.fetchone()[0]
             conn.commit()
-            print(f"[SUCESSO] Pagamento criado com FK composta (ID: {pagamento_id})")
+            # SUCESSO: Pagamento inserido com integridade referencial preservada
             return pagamento_id
         
     except psycopg2.Error as e:
         print(f"[ERRO] Erro ao adicionar pagamento: {e}")
         conn.rollback()
-        
-        # FALLBACK: Tentar sem a FK composta se tudo falhar
-        try:
-            print("[INFO] Tentando fallback sem referência à categoria...")
-            sql_fallback = """
-            INSERT INTO Pagamento (pag_pedido, valor_pago, forma_de_pagamento) 
-            VALUES (%s, %s, %s)
-            RETURNING id_pagamento;
-            """
-            
-            with conn.cursor() as cur:
-                cur.execute(sql_fallback, (
-                    pagamento_data['pag_pedido'], 
-                    pagamento_data['valor_pago'], 
-                    pagamento_data['forma_de_pagamento']
-                ))
-                pagamento_id = cur.fetchone()[0]
-                conn.commit()
-                print(f"[AVISO] Pagamento criado SEM categoria (ID: {pagamento_id})")
-                return pagamento_id
-        except psycopg2.Error as fallback_error:
-            print(f"[ERRO] Fallback também falhou: {fallback_error}")
-            conn.rollback()
-            raise e  # Relança o erro original
+        raise e  # Relança o erro original sem fallback que pode violar NOT NULL
 
 def get_all_pagamentos(conn):
     """Busca todos os pagamentos com dados do pedido e usuário usando estrutura real do Supabase"""
@@ -457,54 +503,81 @@ def get_categoria_usuario(conn, user_id, categoria_nome=None):
         return None
 
 def create_categoria_usuario_if_not_exists(conn, user_id, categoria_nome):
-    """Cria categoria de usuário se não existir - Chave primária composta (id_usuario, nome_categoria)"""
-    try:
-        print(f"[DEBUG] Tentando criar categoria ({user_id}, '{categoria_nome}')")
+    """
+    FUNÇÃO AUXILIAR: CRIAÇÃO AUTOMÁTICA DE CATEGORIA DE USUÁRIO
+    
+    Esta função implementa criação inteligente de categorias com:
+    
+    1. VALIDAÇÃO DE USUÁRIO: Verifica se o usuário existe antes de criar categoria
+    2. CHAVE PRIMÁRIA COMPOSTA: (id_usuario, nome_categoria)
+    3. CONFIGURAÇÃO AUTOMÁTICA: Define valores padrão baseados no tipo de categoria
+    4. TENTATIVAS MÚLTIPLAS: Estratégia de fallback para diferentes cenários
+    
+    Tipos de categoria suportados:
+    - estudante_assistencia: Grupo 1, subsídio total
+    - estudante_regular: Grupo 2, subsídio parcial  
+    - servidor: Grupo 3, sem subsídio
+    
+    Args:
+        conn: Conexão ativa com PostgreSQL
+        user_id: ID do usuário (FK para USUARIO)
+        categoria_nome: Nome da categoria a ser criada
         
-        # Primeiro, verificar se o usuário existe na tabela USUARIO
+    Returns:
+        bool: True se categoria foi criada/existe, False caso contrário
+    """
+    try:
+        # ETAPA 1: VALIDAÇÃO DE INTEGRIDADE REFERENCIAL
+        # Não podemos criar categoria para usuário inexistente (violaria FK)
+        
         sql_check_user = "SELECT id_usuario FROM Usuario WHERE id_usuario = %s;"
         with conn.cursor() as cur:
             cur.execute(sql_check_user, (user_id,))
             user_exists = cur.fetchone()
             
         if not user_exists:
-            print(f"[ERRO] Usuário {user_id} não existe na tabela Usuario")
-            return False
+            return False  # Usuário não existe, não podemos criar categoria
         
-        # Verificar se a combinação específica já existe
+        # ETAPA 2: VERIFICAÇÃO DE EXISTÊNCIA
+        # Se a categoria já existe, não precisamos criar
+        
         existing = get_categoria_usuario(conn, user_id, categoria_nome)
         if existing:
-            print(f"[INFO] Categoria ({user_id}, '{categoria_nome}') já existe")
-            return True
+            return True  # Categoria já existe, missão cumprida
         
-        # Configuração das categorias
+        # ETAPA 3: CONFIGURAÇÃO AUTOMÁTICA POR TIPO DE CATEGORIA
+        # Baseado na Resolução 27/2018 CAD/UnB para preços do RU
+        
         categoria_config = {
             'estudante_assistencia': {
-                'grupo': 1,
-                'subsidio': 'total',
+                'grupo': 1,                    # Grupo prioritário
+                'subsidio': 'total',           # 100% subsidiado (R$ 0,00)
                 'beneficio': 'Desconto total - Assistência estudantil'
             },
             'estudante_regular': {
-                'grupo': 2, 
-                'subsidio': 'parcial',
+                'grupo': 2,                    # Grupo intermediário  
+                'subsidio': 'parcial',         # 60% subsidiado
                 'beneficio': 'Desconto parcial - Estudante regular'
             },
             'servidor': {
-                'grupo': 3,
-                'subsidio': 'sem',
+                'grupo': 3,                    # Sem prioridade
+                'subsidio': 'sem_subsidio',    # Preço integral
                 'beneficio': 'Preço integral - Servidor'
             }
         }
         
+        # Configuração padrão para categorias não mapeadas
         config = categoria_config.get(categoria_nome, {
-            'grupo': 2,
-            'subsidio': 'parcial', 
+            'grupo': 2,                        # Padrão: grupo intermediário
+            'subsidio': 'parcial',             # Padrão: subsídio parcial
             'beneficio': f'Categoria {categoria_nome}'
         })
         
-        # Tentar inserir com todos os campos
+        # ETAPA 4: ESTRATÉGIA DE INSERÇÃO COM FALLBACK
+        # Tentamos diferentes abordagens caso o schema tenha restrições
+        
         sqls_to_try = [
-            # Tentativa 1: Com todos os campos
+            # TENTATIVA 1: Inserção completa com todos os campos de negócio
             {
                 'sql': """
                 INSERT INTO Categoria_Usuario (id_usuario, nome_categoria, grupo, subsidio, beneficio)
@@ -512,7 +585,7 @@ def create_categoria_usuario_if_not_exists(conn, user_id, categoria_nome):
                 """,
                 'params': (user_id, categoria_nome, config['grupo'], config['subsidio'], config['beneficio'])
             },
-            # Tentativa 2: Apenas campos obrigatórios
+            # TENTATIVA 2: Inserção mínima (apenas chave primária composta)
             {
                 'sql': """
                 INSERT INTO Categoria_Usuario (id_usuario, nome_categoria)
@@ -522,24 +595,22 @@ def create_categoria_usuario_if_not_exists(conn, user_id, categoria_nome):
             }
         ]
         
+        # Execução das tentativas em ordem de prioridade
         for i, attempt in enumerate(sqls_to_try):
             try:
-                print(f"[DEBUG] Tentativa {i+1} de inserção...")
                 with conn.cursor() as cur:
                     cur.execute(attempt['sql'], attempt['params'])
                     conn.commit()
-                    print(f"[SUCESSO] Categoria ({user_id}, '{categoria_nome}') criada na tentativa {i+1}")
+                    # SUCESSO: Categoria criada com sucesso
                     return True
             except psycopg2.Error as e:
-                print(f"[DEBUG] Tentativa {i+1} falhou: {e}")
                 conn.rollback()
-                continue
+                continue  # Tenta próxima abordagem
         
-        print(f"[ERRO] Todas as tentativas de criar categoria ({user_id}, '{categoria_nome}') falharam")
+        # FALHA: Todas as tentativas falharam
         return False
             
     except psycopg2.Error as e:
-        print(f"[ERRO] Erro geral ao criar categoria: {e}")
         conn.rollback()
         return False
 
