@@ -521,14 +521,14 @@ def create_categoria_usuario_if_not_exists(conn, user_id, categoria_nome):
     Args:
         conn: Conexão ativa com PostgreSQL
         user_id: ID do usuário (FK para USUARIO)
-        categoria_nome: Nome da categoria a ser criada
+        categoria_nome: Nome da categoria a ser inserida
         
     Returns:
-        bool: True se categoria foi criada/existe, False caso contrário
+        bool: True se categoria foi inserida/existe, False caso contrário
     """
     try:
         # ETAPA 1: VALIDAÇÃO DE INTEGRIDADE REFERENCIAL
-        # Não podemos criar categoria para usuário inexistente (violaria FK)
+        # Não podemos inserir categoria para usuário inexistente (violaria FK)
         
         sql_check_user = "SELECT id_usuario FROM Usuario WHERE id_usuario = %s;"
         with conn.cursor() as cur:
@@ -536,10 +536,10 @@ def create_categoria_usuario_if_not_exists(conn, user_id, categoria_nome):
             user_exists = cur.fetchone()
             
         if not user_exists:
-            return False  # Usuário não existe, não podemos criar categoria
+            return False  # Usuário não existe, não podemos inserir categoria
         
         # ETAPA 2: VERIFICAÇÃO DE EXISTÊNCIA
-        # Se a categoria já existe, não precisamos criar
+        # Se a categoria já existe, não precisamos inserir
         
         existing = get_categoria_usuario(conn, user_id, categoria_nome)
         if existing:
