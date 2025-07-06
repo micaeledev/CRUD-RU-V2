@@ -1,6 +1,6 @@
 # Sistema CRUD - Gerenciamento de Usuários, Pedidos e Pagamentos
 
-Sistema de gerenciamento com interface terminal (TUI) para operações CRUD em 3 tabelas relacionadas.
+Sistema de gerenciamento com interface terminal (TUI) para operações CRUD em 3 tabelas relacionadas
 
 ## Funcionalidades
 
