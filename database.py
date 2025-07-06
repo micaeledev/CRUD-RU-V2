@@ -1,9 +1,7 @@
 # CAMADA DE PERSISTÊNCIA - SISTEMA RU UNB
-# 
 # Este módulo implementa a camada de acesso a dados para o sistema do RU da UNB
 # Gerencia 3 entidades principais em relacionamento hierárquico:
 # USUARIO → PEDIDO → PAGAMENTO
-# 
 # Características técnicas:
 # - Conexão com PostgreSQL/Supabase
 # - Chaves estrangeiras compostas
