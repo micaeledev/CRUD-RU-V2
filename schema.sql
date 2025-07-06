@@ -303,32 +303,101 @@ FROM
 -- CRIAÇÃO DA PROCEDURE
 -- ============================================
 
-CREATE OR REPLACE PROCEDURE MarcarUsuarioComoFormado(p_id_usuario INTEGER)
+CREATE OR REPLACE PROCEDURE VerificarCapacidadeUnidade(
+    p_id_unidade INTEGER,
+    p_data DATE,
+    p_tipo_refeicao VARCHAR(20),
+    OUT p_pode_atender BOOLEAN,
+    OUT p_vagas_restantes INTEGER,
+    OUT p_status_mensagem TEXT
+)
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    v_status_atual VARCHAR(20);
+    v_capacidade_maxima INTEGER;
+    v_pedidos_realizados INTEGER;
+    v_nome_unidade VARCHAR(100);
+    v_unidade_existe BOOLEAN := FALSE;
 BEGIN
-    SELECT status_usuario INTO v_status_atual
-    FROM Usuario
-    WHERE id_usuario = p_id_usuario;
-
-    IF NOT FOUND THEN
-        RAISE EXCEPTION 'ERRO: Usuário com ID % não encontrado.', p_id_usuario;
+    p_pode_atender := FALSE;
+    p_vagas_restantes := 0;
+    p_status_mensagem := '';
+    
+    SELECT 
+        u.capacidade, 
+        u.nome_unidade,
+        TRUE
+    INTO 
+        v_capacidade_maxima, 
+        v_nome_unidade,
+        v_unidade_existe
+    FROM Unidade u
+    WHERE u.id_unidade = p_id_unidade;
+    
+    IF NOT v_unidade_existe THEN
+        RAISE EXCEPTION 'ERRO: Unidade com ID % não encontrada no sistema.', p_id_unidade;
     END IF;
-
-    IF v_status_atual = 'ativo' THEN
-        UPDATE Usuario
-        SET status_usuario = 'formado'
-        WHERE id_usuario = p_id_usuario;
-
-        RAISE NOTICE 'SUCESSO: O status do usuário com ID % foi atualizado para "formado".', p_id_usuario;
-    ELSE
-        RAISE WARNING USING MESSAGE = format(
-            'AVISO: A operação não foi realizada. O status do usuário com ID %s já é "%s" e não "ativo".',
-            p_id_usuario, v_status_atual
+    
+    IF p_tipo_refeicao NOT IN ('cafe', 'almoco', 'jantar') THEN
+        RAISE EXCEPTION 'ERRO: Tipo de refeição inválido. Use: cafe, almoco ou jantar.';
+    END IF;
+    
+    IF p_data < CURRENT_DATE THEN
+        p_status_mensagem := format(
+            'AVISO: Data informada (%s) já passou. Verificação apenas para consulta.',
+            p_data
         );
+        RAISE WARNING '%', p_status_mensagem;
     END IF;
+    
+    SELECT COUNT(ped.id_pedido)
+    INTO v_pedidos_realizados
+    FROM Pedido ped
+    JOIN Cardapio card ON ped.ped_cardapio = card.id_cardapio
+    JOIN Unidade un ON card.id_cardapio = un.id_cardapio
+    WHERE un.id_unidade = p_id_unidade
+      AND card.tipo = p_tipo_refeicao
+      AND DATE(ped.data_hora) = p_data
+      AND ped.status_do_pedido IN ('pago', 'entregue');
+    
+    v_pedidos_realizados := COALESCE(v_pedidos_realizados, 0);
+    p_vagas_restantes := v_capacidade_maxima - v_pedidos_realizados;
+    
+    IF p_vagas_restantes > 0 THEN
+        p_pode_atender := TRUE;
+        p_status_mensagem := format(
+            'SUCESSO: Unidade "%s" pode atender mais pedidos. Vagas disponíveis: %s de %s.',
+            v_nome_unidade, p_vagas_restantes, v_capacidade_maxima
+        );
+        RAISE NOTICE '%', p_status_mensagem;
+    ELSE
+        p_pode_atender := FALSE;
+        p_vagas_restantes := 0;
+        
+        IF v_pedidos_realizados = v_capacidade_maxima THEN
+            p_status_mensagem := format(
+                'LIMITE: Unidade "%s" atingiu capacidade máxima (%s pedidos) para %s em %s.',
+                v_nome_unidade, v_capacidade_maxima, p_tipo_refeicao, p_data
+            );
+        ELSE
+            p_status_mensagem := format(
+                'EXCESSO: Unidade "%s" excedeu capacidade! %s pedidos realizados (máx: %s) para %s em %s.',
+                v_nome_unidade, v_pedidos_realizados, v_capacidade_maxima, p_tipo_refeicao, p_data
+            );
+        END IF;
+        
+        RAISE WARNING '%', p_status_mensagem;
+    END IF;
+    
+    RAISE NOTICE 'DEBUG: Unidade=%, Data=%, Tipo=%, Pedidos=%, Capacidade=%, Disponível=%', 
+        v_nome_unidade, p_data, p_tipo_refeicao, v_pedidos_realizados, v_capacidade_maxima, p_pode_atender;
+        
+EXCEPTION
+    WHEN OTHERS THEN
+        p_pode_atender := FALSE;
+        p_vagas_restantes := 0;
+        p_status_mensagem := format('ERRO INESPERADO: %s', SQLERRM);
+        RAISE EXCEPTION '%', p_status_mensagem;
 END;
 $$;
 
