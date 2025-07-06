@@ -1,7 +1,6 @@
 # CAMADA DE APRESENTAÇÃO - TERMINAL USER INTERFACE (TUI)
 #
 # Este módulo implementa a interface de usuário em terminal para o sistema RU.
-# 
 # CARACTERÍSTICAS PRINCIPAIS:
 # - Interface intuitiva com menus navegáveis
 # - Validação em tempo real de entrada de dados
