@@ -1,7 +1,6 @@
 # SISTEMA CRUD - RESTAURANTE UNIVERSITÁRIO UNB
-#
 # Sistema de gerenciamento completo para o RU da UnB implementando:
-# 
+
 # ARQUITETURA MVC:
 # - Model: database.py (Camada de dados/PostgreSQL)  
 # - View: tui.py (Interface de usuário/Terminal)
