@@ -424,5 +424,5 @@ ORDER BY tabela;
 -- Testar a view
 SELECT * FROM vw_relatorio_pagamentos LIMIT 5;
 
--- Testar a procedure (exemplo)
--- CALL MarcarUsuarioComoFormado(3);
+-- Testar a procedure 
+CALL VerificarCapacidadeUnidade(1, '2024-07-15', 'almoco', NULL, NULL, NULL);
